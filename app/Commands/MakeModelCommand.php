@@ -30,14 +30,21 @@ class MakeModelCommand extends Command
     public function handle()
     {
         $newModelFile = new PhpFile();
-        $newModelFile->setStrictTypes(true);
+        if (config('generator.use_strict_types')) {
+            $newModelFile->setStrictTypes(true);
+        }      
         $namespace = $newModelFile->addNamespace(config('generator.default_model_namespace').$this->argument('serviceOrFeature'));
+        if ($extends = config('generator.default_model_extends')) {
+            $namespace->addUse($extends);
+        }
+       
         // Imports
-        $namespace->addUse(config('generator.default_model_extends'));
         array_map(fn ($import) => $namespace->addUse($import), config('generator.default_model_traits'));
         
         $newClass = $namespace->addClass($this->argument('name'));
-        $newClass->addExtend(config('generator.default_model_extends'));
+        if($extends) {
+            $newClass->addExtend($extends);
+        }
 
         array_map(fn ($import) => $newClass->addTrait($import), config('generator.default_model_traits'));
 

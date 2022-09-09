@@ -21,4 +21,7 @@
             <directory suffix=".php">./app</directory>
         </include>
     </coverage>
+    <php>
+        <env name="DB_CONNECTION" value="mysql" />
+    </php>
 </phpunit>

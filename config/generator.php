@@ -7,7 +7,7 @@ return [
  
     // Database models
     'default_model_namespace' => 'App\\Models\\',
-    'default_model_extends' => 'App\\Models\\EloquentModelAbstract',
+    'default_model_extends' => '',
     'default_model_traits' => [
         'Illuminate\\Database\\Eloquent\\Factories\\HasFactory',
     ],
@@ -17,24 +17,18 @@ return [
     'belongs_to_many_description' => 'The %s owners of this item',
     'model_to_table' => function (string $model) {
         return match ($model) {
-            // Not every model will be plural.
-            "AdPerformance" => "ad_performance",
-            "AdGroupPerformance" => "ad_group_performance",
-            "CampaignPerformance" => "campaign_performance",
-            "AccountPerformance" => "account_performance",
-            "CampaignLocationTargetPerformance" => "campaign_location_target_performance",
-            "KeywordPerformance" => "keyword_performance",
+            // Not every model will be plural, but convention dictates most will.
             default => Str::snake(Str::pluralStudly($model), '_'),
         };
     },
 
     // Repositories
     'default_repository_namespace' => 'App\\Repositories\\',
-    'default_repository_extends' => 'App\\Repositories\\EloquentRepositoryAbstract',
+    'default_repository_extends' => '',
     'default_repository_traits' => [],
     // Repository interfaces
     'default_repository_interface_namespace' => 'App\\Contracts\\Repositories\\',
-    'default_repository_interface_extends' => 'App\\Contracts\\Repositories\\BaseRepositoryContract',
+    'default_repository_interface_extends' => '',
     'default_repository_interface_traits' => [],
 
     
