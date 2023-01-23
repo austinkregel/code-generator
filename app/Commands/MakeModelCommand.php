@@ -2,15 +2,14 @@
 
 namespace App\Commands;
 
-use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToThrough;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 use LaravelZero\Framework\Commands\Command;
 use Nette\PhpGenerator\ClassType;
 use Nette\PhpGenerator\PhpFile;
-use Illuminate\Support\Str;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsToThrough;
 use Nette\PhpGenerator\PhpNamespace;
 
 class MakeModelCommand extends Command
@@ -32,17 +31,17 @@ class MakeModelCommand extends Command
         $newModelFile = new PhpFile();
         if (config('generator.use_strict_types')) {
             $newModelFile->setStrictTypes(true);
-        }      
+        }
         $namespace = $newModelFile->addNamespace(config('generator.default_model_namespace').$this->argument('serviceOrFeature'));
         if ($extends = config('generator.default_model_extends')) {
             $namespace->addUse($extends);
         }
-       
+
         // Imports
         array_map(fn ($import) => $namespace->addUse($import), config('generator.default_model_traits'));
-        
+
         $newClass = $namespace->addClass($this->argument('name'));
-        if($extends) {
+        if ($extends) {
             $newClass->addExtend($extends);
         }
 
@@ -52,10 +51,10 @@ class MakeModelCommand extends Command
 
         $this->addModelAttributesFromTable($namespace, $newClass);
 
-        file_put_contents(getcwd().'/app/Models/' . $this->argument('serviceOrFeature') .'/'. $this->argument('name') .'.php', $newModelFile);
+        file_put_contents(getcwd().'/app/Models/'.$this->argument('serviceOrFeature').'/'.$this->argument('name').'.php', $newModelFile);
     }
 
-    protected function addModelAttributesFromTable(PhpNamespace $namespace, ClassType $newClass) 
+    protected function addModelAttributesFromTable(PhpNamespace $namespace, ClassType $newClass)
     {
         $table = $this->hasOption('table') ? $this->option('table') : config('generator.model_to_table')($this->argument('name'));
 
@@ -66,7 +65,7 @@ class MakeModelCommand extends Command
                 'CHARACTER_MAXIMUM_LENGTH',
                 'IS_NULLABLE',
                 'NUMERIC_PRECISION',
-                'NUMERIC_SCALE'
+                'NUMERIC_SCALE',
             ])
             ->where('table_name', $table)
             ->get()
@@ -76,15 +75,15 @@ class MakeModelCommand extends Command
                 'length' => $model->CHARACTER_MAXIMUM_LENGTH,
                 'nullable' => ($model->IS_NULLABLE !== 'NO'),
                 'precision' => $model->NUMERIC_PRECISION,
-                'scale' => $model->NUMERIC_SCALE
+                'scale' => $model->NUMERIC_SCALE,
             ])->unique('name');
 
         $columnNames = $tableColumns->map(fn ($row) => $row['name']);
 
-        if (!$columnNames->contains('id')) {
+        if (! $columnNames->contains('id')) {
             $this->addTypeAsCommentToSchema('bool', $newClass->addProperty('incrementing')->setVisibility('public')->setValue(false));
         }
-        if (!$columnNames->contains('created_at') && !$columnNames->contains('updated_at')) {
+        if (! $columnNames->contains('created_at') && ! $columnNames->contains('updated_at')) {
             $this->addTypeAsCommentToSchema('bool', $newClass->addProperty('timestamps')->setVisibility('public')->setValue(false));
         }
         if ($columnNames->contains('deleted_at')) {
@@ -99,14 +98,14 @@ class MakeModelCommand extends Command
             'float', 'double', 'decimal' => true,
             'text', 'mediumtext', 'longtext' => true,
             'tinyblob', 'blob', 'mediumblob', 'longblob' => true,
-         
+
             default => false,
         })->reduce(fn ($columns, $column) => array_merge($columns, [
             $column['name'] => match ($column['type']) {
                 'float','double','decimal' => 'float',
                 'json','text','longtext' => 'json',
                 default => 'string',
-            }
+            },
         ]), []);
         $castsProperty = $newClass->addProperty('casts', $neededCasts);
         $this->addTypeAsCommentToSchema('string[]', $castsProperty);
@@ -117,17 +116,17 @@ class MakeModelCommand extends Command
         })->map(fn ($column) => $column['name'])->values()->toArray());
 
         $this->addTypeAsCommentToSchema('string[]', $datesProperty);
-        
-        $fillableProperty = $newClass->addProperty('fillable', $tableColumns->filter(fn ($column) => $column['name'] != 'id' && !Str::endsWith($column['name'], '_id'))
+
+        $fillableProperty = $newClass->addProperty('fillable', $tableColumns->filter(fn ($column) => $column['name'] != 'id' && ! Str::endsWith($column['name'], '_id'))
             ->values()
             ->map(fn ($column) => $column['name'])
             ->toArray());
         $this->addTypeAsCommentToSchema('string[]', $fillableProperty);
 
-        $tableColumns->map(fn ($column) =>$this->addOpenAPIDocumentation(
+        $tableColumns->map(fn ($column) => $this->addOpenAPIDocumentation(
             $fillableProperty,
-            $column['name'], 
-            ' Description of field', 
+            $column['name'],
+            ' Description of field',
             $column['type'],
             $column['length'] ?? $column['precision'] ?? null,
             in_array($column['name'], [
@@ -140,33 +139,32 @@ class MakeModelCommand extends Command
         $newClass->addComment(sprintf('  required={%s}', $tableColumns->map(fn ($field) => sprintf('"%s"', $field['name']))->implode(', ')));
         $newClass->addComment(')');
 
-        $tableColumns->unique('name')->map(fn ($field) => $newClass->addComment('@property '.$this->filterTypeToPhpType($field['type']) . ($field['nullable'] ?? false ? "|null":'') . ' $'.$field['name']));
-
+        $tableColumns->unique('name')->map(fn ($field) => $newClass->addComment('@property '.$this->filterTypeToPhpType($field['type']).($field['nullable'] ?? false ? '|null' : '').' $'.$field['name']));
     }
 
-    protected function addRelationMethodsAndDocumentation(PhpNamespace $namespace, ClassType $newClass) 
+    protected function addRelationMethodsAndDocumentation(PhpNamespace $namespace, ClassType $newClass)
     {
         $newUseStatementsBasedOnRelations = array_values(array_filter(array_merge(
             $belongsTo = array_values(array_filter(explode(',', $this->option('belongsTo') ?? ''))),
             $belongsToMany = array_values(array_filter(explode(',', $this->option('belongsToMany') ?? ''))),
             $hasMany = array_values(array_filter(explode(',', $this->option('hasMany') ?? ''))),
             $hasOne = array_values(array_filter(explode(',', $this->option('hasOne') ?? '')))
-        ), fn ($value) => !empty($value)));
-        
-        if (!empty($belongsTo)) {
+        ), fn ($value) => ! empty($value)));
+
+        if (! empty($belongsTo)) {
             $namespace->addUse(BelongsTo::class);
         }
-        if (!empty($belongsToMany)) {
+        if (! empty($belongsToMany)) {
             $namespace->addUse(BelongsToThrough::class);
         }
-        if (!empty($hasMany)) {
+        if (! empty($hasMany)) {
             $namespace->addUse(HasMany::class);
         }
-        if (!empty($hasOne)) {
+        if (! empty($hasOne)) {
             $namespace->addUse(HasOne::class);
         }
         array_map(fn ($import) => $namespace->addUse($import), $newUseStatementsBasedOnRelations);
-        
+
         array_map(function ($modelClassWithNamespaceToImport) use ($newClass) {
             $methodName = Str::camel($classBasename = class_basename($modelClassWithNamespaceToImport));
             $method = $newClass->addMethod($methodName);
@@ -177,40 +175,38 @@ class MakeModelCommand extends Command
         array_map(function ($modelClassWithNamespaceToImport) use ($newClass) {
             $methodName = Str::camel($classBasename = class_basename($modelClassWithNamespaceToImport));
             $method = $newClass->addMethod($methodName);
-            $method->addComment("@OA\\Property(");
+            $method->addComment('@OA\\Property(');
             $method->addComment("  property=\"$methodName\",");
-            $method->addComment(sprintf("  description=\"%s\",", sprintf(config('generator.belongs_to_many_description'), $classBasename)));
-            $method->addComment("  type=\"array\",");
+            $method->addComment(sprintf('  description="%s",', sprintf(config('generator.belongs_to_many_description'), $classBasename)));
+            $method->addComment('  type="array",');
             $method->addComment("  @OA\\Items(ref=\"#components/shcemas/$classBasename\")");
-            $method->addComment(")");
+            $method->addComment(')');
             $method->setBody("return \$this->belongsToMany({$classBasename}::class);");
-            $method->setReturnType("BelongsToMany");
+            $method->setReturnType('BelongsToMany');
         }, $belongsToMany);
         array_map(function ($modelClassWithNamespaceToImport) use ($newClass) {
-
             $methodName = Str::camel($classBasename = class_basename($modelClassWithNamespaceToImport));
             $method = $newClass->addMethod($methodName);
-            $method->addComment("@OA\\Property(");
+            $method->addComment('@OA\\Property(');
             $method->addComment("  property=\"$methodName\",");
-            $method->addComment(sprintf("  description=\"%s\",", sprintf(config('generator.has_many_description'), $classBasename)));
-            $method->addComment("  type=\"array\",");
+            $method->addComment(sprintf('  description="%s",', sprintf(config('generator.has_many_description'), $classBasename)));
+            $method->addComment('  type="array",');
             $method->addComment("  @OA\\Items(ref=\"#components/shcemas/$classBasename\")");
-            $method->addComment(")");
+            $method->addComment(')');
             $method->setBody("return \$this->hasMany({$classBasename}::class);");
-            $method->setReturnType("HasMany");
-
+            $method->setReturnType('HasMany');
         }, $hasMany);
         array_map(function ($modelClassWithNamespaceToImport) use ($newClass) {
             $methodName = Str::camel($classBasename = class_basename($modelClassWithNamespaceToImport));
             $method = $newClass->addMethod($methodName);
-            $method->addComment("@OA\\Property(");
+            $method->addComment('@OA\\Property(');
             $method->addComment("  property=\"$methodName\",");
-            $method->addComment(sprintf("  description=\"%s\",", sprintf(config('generator.has_one_description'), $classBasename)));
-            $method->addComment("  type=\"object\",");
+            $method->addComment(sprintf('  description="%s",', sprintf(config('generator.has_one_description'), $classBasename)));
+            $method->addComment('  type="object",');
             $method->addComment("  @OA\\Items(ref=\"#components/shcemas/$classBasename\")");
-            $method->addComment(")");
+            $method->addComment(')');
             $method->setBody("return \$this->hasOne({$classBasename}::class);");
-            $method->setReturnType("HasOne");
+            $method->setReturnType('HasOne');
         }, $hasOne);
     }
 
@@ -259,30 +255,28 @@ class MakeModelCommand extends Command
 
     protected function addOpenAPIDocumentation(
         $newClass,
-        string $property, 
-        string $description, 
+        string $property,
+        string $description,
         string $type,
         ?string $precision = null,
         ?bool $readonly = false
     ) {
-        
-        $newClass->addComment("@OA\\Property(");
+        $newClass->addComment('@OA\\Property(');
         $newClass->addComment("  property=\"$property\",");
-        $newClass->addComment(sprintf("  description=\"%s\",", 'The '.str_replace('_', ' ', $property)));
+        $newClass->addComment(sprintf('  description="%s",', 'The '.str_replace('_', ' ', $property)));
 
         if ($precision) {
             $newClass->addComment("  maxLength=$precision,");
         }
-        
-        if (!in_array($type, ['string', 'varchar', 'float'])) {
-            $newClass->addComment(sprintf("  format=\"%s\","  , $this->filterTypeToPhpFormat($type)));
-        } 
-        $newClass->addComment(sprintf("  type=\"%s\"" . ($readonly ? ',' : ''), $this->filterTypeToPhpType($type)));
-        
-        
-        if ($readonly) {
-            $newClass->addComment("  readOnly=true");
+
+        if (! in_array($type, ['string', 'varchar', 'float'])) {
+            $newClass->addComment(sprintf('  format="%s",', $this->filterTypeToPhpFormat($type)));
         }
-        $newClass->addComment(")");
+        $newClass->addComment(sprintf('  type="%s"'.($readonly ? ',' : ''), $this->filterTypeToPhpType($type)));
+
+        if ($readonly) {
+            $newClass->addComment('  readOnly=true');
+        }
+        $newClass->addComment(')');
     }
 }

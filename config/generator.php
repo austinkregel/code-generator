@@ -3,8 +3,8 @@
 use Illuminate\Support\Str;
 
 return [
-    'use_strict_types' => true,
- 
+    'use_strict_types' => false,
+
     // Database models
     'default_model_namespace' => 'App\\Models\\',
     'default_model_extends' => '',
@@ -31,5 +31,4 @@ return [
     'default_repository_interface_extends' => '',
     'default_repository_interface_traits' => [],
 
-    
 ];
